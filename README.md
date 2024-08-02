@@ -32,7 +32,7 @@ This tool restarts Kubernetes resources (Deployments, StatefulSets, and DaemonSe
 
 5. Set the environment variable that exclude namepsace(s) for scanning and rollout restarting the deployments. Default namepsace such as default and kube-system are excluded even the variable is not set. 
 
-    `export EXCLUDE_K8S_NS="kube-system,kube-public,kube-node-lease,prod"
+    `export EXCLUDE_K8S_NS="kube-system,kube-public,kube-node-lease,prod"`
 
 5. Run the script
 
