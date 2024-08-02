@@ -44,25 +44,17 @@ func main() {
 		return
 	}
 
-	fmt.Println("connecting cluster...")
 	ctx := context.Background()
 
-	namespaces, err := clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
-	if err != nil {
-		fmt.Printf("error listing namespaces :: %v\n", err)
-		return
-	}
 
-	var filteredNamespaces []corev1.Namespace
-	for _, ns := range namespaces.Items {
-		if !contains(excludedNamespaces, ns.Name) {
-			filteredNamespaces = append(filteredNamespaces, ns)
-		}
-	}
+	filteredNamespaces,_ := GetFilteredNameSpaces(ctx, clientset,excludedNamespaces)
+	fmt.Printf("found %d namespaces from fn\n", len(filteredNamespaces))
 
-	fmt.Printf("found %d namespaces\n", len(filteredNamespaces))
 	for _, ns := range filteredNamespaces {
 		fmt.Printf("searching namespace %s\n", ns.Name)
+
+		 restartMatchingDeployments(ctx, clientset, ns.Name, filterName)
+
 		deployments, err := clientset.AppsV1().Deployments(ns.Name).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			fmt.Printf("error listing deployments :: %v\n", err)
@@ -118,6 +110,49 @@ func main() {
 	}
 	fmt.Printf("gracefull restart process completed for pods resource containing keyword %s\n", filterName)
 }
+
+func GetFilteredNameSpaces(ctx context.Context, clientset *kubernetes.Clientset,excludedNamespaces []string) ([]corev1.Namespace,error)  {
+
+	namespaces, err := clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+        if err != nil {
+                fmt.Printf("error listing namespaces :: %v\n", err)
+                return nil, err
+        }
+
+        var filteredNamespaces []corev1.Namespace
+        for _, ns := range namespaces.Items {
+                if !contains(excludedNamespaces, ns.Name) {
+                        filteredNamespaces = append(filteredNamespaces, ns)
+                }
+        }
+
+        fmt.Printf("found %d namespaces\n", len(filteredNamespaces))
+	return filteredNamespaces,nil
+}
+
+
+ func restartMatchingDeployments(ctx context.Context, clientset *kubernetes.Clientset, namespace, filterName string) error {
+  deployments, err := clientset.AppsV1().Deployments(namespace).List(ctx, metav1.ListOptions{})
+  if err != nil {
+    return fmt.Errorf("error listing deployments: %w", err)
+  }
+
+  for _, deployment := range deployments.Items {
+     fmt.Printf("Scanning Deployment %s\n",deployment.Name)
+    if strings.Contains(strings.ToLower(deployment.Name), strings.ToLower(filterName)) {
+      _, err := clientset.AppsV1().Deployments(namespace).
+        Patch(ctx, deployment.Name, types.StrategicMergePatchType, []byte(GetPatchUpdateAnnotationSpec()), metav1.PatchOptions{})
+      if err != nil {
+        return fmt.Errorf("error restarting deployment %s: %w", deployment.Name, err)
+      }
+      fmt.Printf("deployment restarted successfully for %s\n", deployment.Name)
+    }
+  }
+
+  return nil
+}
+
+
 
 func GetPatchUpdateAnnotationSpec() string {
 	return fmt.Sprintf(`{"spec": {"template": {"metadata": {"annotations": {"kubectl.kubernetes.io/restartedAt": "%s"}}}}}`, time.Now().Format(time.RFC3339))
