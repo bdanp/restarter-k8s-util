@@ -55,23 +55,9 @@ func main() {
 
 		restartMatchingDeployments(ctx, clientset, ns.Name, filterName)
 		restartMatchingStatefulSets(ctx, clientset, ns.Name, filterName)
+		restartMatchingDaemonSets(ctx, clientset, ns.Name, filterName)
 
-		daemonsets, err := clientset.AppsV1().DaemonSets(ns.Name).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			fmt.Printf("error listing daemonsets :: %v\n", err)
-			continue
-		}
 
-		// Check each daemonset and update rollout annotation
-		for _, daemonset := range daemonsets.Items {
-			if strings.Contains(strings.ToLower(daemonset.Name), filterName) {
-				_, err := clientset.AppsV1().DaemonSets(ns.Name).Patch(ctx, daemonset.Name, types.StrategicMergePatchType, []byte(GetPatchUpdateAnnotationSpec()), metav1.PatchOptions{})
-				if err != nil {
-					fmt.Printf("error restarting daemonset %s:: %v\n", daemonset.Name, err)
-				}
-				fmt.Printf("daemonset restarted successfully for %s\n", daemonset.Name)
-			}
-		}
 	}
 	fmt.Printf("gracefull restart process completed for pods resource containing keyword %s\n", filterName)
 }
@@ -139,6 +125,32 @@ func restartMatchingStatefulSets(ctx context.Context, clientset *kubernetes.Clie
 	return nil
 }
 
+
+func restartMatchingDaemonSets(ctx context.Context, clientset *kubernetes.Clientset, namespace string, filterName string) error {
+    daemonsets, err := clientset.AppsV1().DaemonSets(namespace).List(ctx, metav1.ListOptions{})
+    if err != nil {
+        return fmt.Errorf("error listing daemonsets: %v", err)
+    }
+
+    for _, daemonset := range daemonsets.Items {
+	fmt.Printf("Scanning daemonset %s\n",daemonset.Name)
+        if strings.Contains(strings.ToLower(daemonset.Name), filterName) {
+            _, err := clientset.AppsV1().DaemonSets(namespace).Patch(
+                ctx,
+                daemonset.Name,
+                types.StrategicMergePatchType,
+                []byte(GetPatchUpdateAnnotationSpec()),
+                metav1.PatchOptions{},
+            )
+            if err != nil {
+                return fmt.Errorf("error restarting daemonset %s: %v", daemonset.Name, err)
+            }
+            fmt.Printf("daemonset restarted successfully for %s\n", daemonset.Name)
+        }
+    }
+
+    return nil
+}
 
 
 func GetPatchUpdateAnnotationSpec() string {
