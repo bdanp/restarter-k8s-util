@@ -53,43 +53,8 @@ func main() {
 	for _, ns := range filteredNamespaces {
 		fmt.Printf("searching namespace %s\n", ns.Name)
 
-		 restartMatchingDeployments(ctx, clientset, ns.Name, filterName)
-
-		deployments, err := clientset.AppsV1().Deployments(ns.Name).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			fmt.Printf("error listing deployments :: %v\n", err)
-			continue
-		}
-
-		for _, deployment := range deployments.Items {
-			if strings.Contains(strings.ToLower(deployment.Name), filterName) {
-				_, err := clientset.AppsV1().Deployments(ns.Name).
-					Patch(ctx, deployment.Name, types.StrategicMergePatchType, []byte(GetPatchUpdateAnnotationSpec()), metav1.PatchOptions{})
-				if err != nil {
-					fmt.Printf("error restarting deployment %s :: %v\n", deployment.Name, err)
-					continue
-				}
-				fmt.Printf("deployment restarted successfully for %s\n", deployment.Name)
-			}
-		}
-
-		statefulsets, err := clientset.AppsV1().StatefulSets(ns.Name).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			fmt.Printf("error listing statefulsets :: %v\n", err)
-			continue
-		}
-
-		for _, statefulset := range statefulsets.Items {
-			if strings.Contains(strings.ToLower(statefulset.Name), filterName) {
-				_, err := clientset.AppsV1().StatefulSets(ns.Name).
-					Patch(ctx, statefulset.Name, types.StrategicMergePatchType, []byte(GetPatchUpdateAnnotationSpec()), metav1.PatchOptions{})
-				if err != nil {
-					fmt.Printf("error restarting statefulset %s :: %v\n", statefulset.Name, err)
-					continue
-				}
-				fmt.Printf("statefulset restarted successfully for %s\n", statefulset.Name)
-			}
-		}
+		restartMatchingDeployments(ctx, clientset, ns.Name, filterName)
+		restartMatchingStatefulSets(ctx, clientset, ns.Name, filterName)
 
 		daemonsets, err := clientset.AppsV1().DaemonSets(ns.Name).List(ctx, metav1.ListOptions{})
 		if err != nil {
@@ -150,6 +115,28 @@ func GetFilteredNameSpaces(ctx context.Context, clientset *kubernetes.Clientset,
   }
 
   return nil
+}
+
+
+func restartMatchingStatefulSets(ctx context.Context, clientset *kubernetes.Clientset, namespace, filterName string) error {
+	statefulsets, err := clientset.AppsV1().StatefulSets(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("error listing statefulsets: %w", err)
+	}
+
+	for _, statefulset := range statefulsets.Items {
+	 	fmt.Printf("Scanning Statefulset %s\n",statefulset.Name)
+		if strings.Contains(strings.ToLower(statefulset.Name), strings.ToLower(filterName)) {
+			_, err := clientset.AppsV1().StatefulSets(namespace).
+				Patch(ctx, statefulset.Name, types.StrategicMergePatchType, []byte(GetPatchUpdateAnnotationSpec()), metav1.PatchOptions{})
+			if err != nil {
+				return fmt.Errorf("error restarting statefulset %s: %w", statefulset.Name, err)
+			}
+			fmt.Printf("statefulset restarted successfully for %s\n", statefulset.Name)
+		}
+	}
+
+	return nil
 }
 
 
